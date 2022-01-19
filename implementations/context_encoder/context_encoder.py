@@ -86,14 +86,16 @@ transforms_ = [
     transforms.ToTensor(),
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
 ]
+
 dataloader = DataLoader(
-    ImageDataset("../../data/%s" % opt.dataset_name, transforms_=transforms_),
+
+    ImageDataset("../data/%s" % opt.dataset_name, transforms_=transforms_),
     batch_size=opt.batch_size,
     shuffle=True,
     num_workers=opt.n_cpu,
 )
 test_dataloader = DataLoader(
-    ImageDataset("../../data/%s" % opt.dataset_name, transforms_=transforms_, mode="val"),
+    ImageDataset("../data/%s" % opt.dataset_name, transforms_=transforms_, mode="val"),
     batch_size=12,
     shuffle=True,
     num_workers=1,
