@@ -1,7 +1,8 @@
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
-
+from torch.utils.tensorboard import SummaryWriter
+from torchvision import datasets, transforms
 
 class Generator(nn.Module):
     def __init__(self, channels=3):
@@ -32,7 +33,9 @@ class Generator(nn.Module):
             *upsample(512, 256),
             *upsample(256, 128),
             *upsample(128, 64),
-            nn.Conv2d(64, channels, 3, 1, 1),
+            # nn.Conv2d(64, channels, 3, 1, 1),
+            *upsample(64, 128),
+            nn.Conv2d(128, channels, 3, 1, 1),
             nn.Tanh()
         )
 
@@ -54,6 +57,9 @@ class Discriminator(nn.Module):
 
         layers = []
         in_filters = channels
+        # for out_filters, stride, normalize in [(128, 2, False), (256, 2, True), (512, 2, True), (1024, 1, True)]:
+        #     layers.extend(discriminator_block(in_filters, out_filters, stride, normalize))
+        #     in_filters = out_filters
         for out_filters, stride, normalize in [(64, 2, False), (128, 2, True), (256, 2, True), (512, 1, True)]:
             layers.extend(discriminator_block(in_filters, out_filters, stride, normalize))
             in_filters = out_filters

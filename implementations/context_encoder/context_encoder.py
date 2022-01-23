@@ -7,7 +7,7 @@ Instrustion on running the script:
 2. Save the folder 'img_align_celeba' to '../../data/'
 4. Run the sript using command 'python3 context_encoder.py'
 """
-
+import matplotlib.pyplot as plt
 import argparse
 import os
 import numpy as np
@@ -28,19 +28,21 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 
+from torch.utils.tensorboard import SummaryWriter
+
 os.makedirs("images", exist_ok=True)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--n_epochs", type=int, default=200, help="number of epochs of training")
 parser.add_argument("--batch_size", type=int, default=8, help="size of the batches")
-parser.add_argument("--dataset_name", type=str, default="img_align_celeba", help="name of the dataset")
+parser.add_argument("--dataset_name", type=str, default="val", help="name of the dataset")
 parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
 parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
 parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
 parser.add_argument("--n_cpu", type=int, default=4, help="number of cpu threads to use during batch generation")
 parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent space")
 parser.add_argument("--img_size", type=int, default=128, help="size of each image dimension")
-parser.add_argument("--mask_size", type=int, default=64, help="size of random mask")
+parser.add_argument("--mask_size", type=int, default=128, help="size of random mask")
 parser.add_argument("--channels", type=int, default=3, help="number of image channels")
 parser.add_argument("--sample_interval", type=int, default=500, help="interval between image sampling")
 opt = parser.parse_args()
@@ -52,6 +54,7 @@ cuda = True if torch.cuda.is_available() else False
 patch_h, patch_w = int(opt.mask_size / 2 ** 3), int(opt.mask_size / 2 ** 3)
 patch = (1, patch_h, patch_w)
 
+writer = SummaryWriter()
 
 def weights_init_normal(m):
     classname = m.__class__.__name__
@@ -87,15 +90,18 @@ transforms_ = [
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
 ]
 
+# im = Image.open('../../data/train/{}'.format('000025.png'))
+# print(im)
+# datasets.CelebA("../../data/train")
 dataloader = DataLoader(
-
-    ImageDataset("../data/%s" % opt.dataset_name, transforms_=transforms_),
+    ImageDataset("../../data/train", transforms_=transforms_),
     batch_size=opt.batch_size,
     shuffle=True,
     num_workers=opt.n_cpu,
 )
+
 test_dataloader = DataLoader(
-    ImageDataset("../data/%s" % opt.dataset_name, transforms_=transforms_, mode="val"),
+    ImageDataset("../../data/val", transforms_=transforms_, mode="val"),
     batch_size=12,
     shuffle=True,
     num_workers=1,
@@ -112,7 +118,7 @@ def save_sample(batches_done):
     samples, masked_samples, i = next(iter(test_dataloader))
     samples = Variable(samples.type(Tensor))
     masked_samples = Variable(masked_samples.type(Tensor))
-    i = i[0].item()  # Upper-left coordinate of mask
+    i = i[0][0][0][0].item()  # Upper-left coordinate of mask
     # Generate inpainted image
     gen_mask = generator(masked_samples)
     filled_samples = masked_samples.clone()
@@ -136,7 +142,7 @@ for epoch in range(opt.n_epochs):
         # Configure input
         imgs = Variable(imgs.type(Tensor))
         masked_imgs = Variable(masked_imgs.type(Tensor))
-        masked_parts = Variable(masked_parts.type(Tensor))
+        # masked_parts = Variable(masked_parts.type(Tensor))
 
         # -----------------
         #  Train Generator
@@ -145,17 +151,27 @@ for epoch in range(opt.n_epochs):
         optimizer_G.zero_grad()
 
         # Generate a batch of images
+        print(masked_imgs.shape)
+        # plt.imshow(masked_imgs.detach().numpy()[5,:,:,:].reshape(128,128,3))
+        # plt.show()
         gen_parts = generator(masked_imgs)
+        print(gen_parts.shape)
+        print(valid.shape, fake.shape, imgs.shape)
+        print(valid)
+        # plt.imshow(gen_parts.detach().numpy()[0,:,:,:].reshape(64,64,3))
 
         # Adversarial and pixelwise loss
         g_adv = adversarial_loss(discriminator(gen_parts), valid)
-        g_pixel = pixelwise_loss(gen_parts, masked_parts)
+        print(discriminator(gen_parts).shape)
+        g_pixel = pixelwise_loss(gen_parts, imgs)
         # Total loss
         g_loss = 0.001 * g_adv + 0.999 * g_pixel
 
         g_loss.backward()
         optimizer_G.step()
-
+        writer.add_scalar('gLoss/train', g_loss, epoch)
+        writer.add_scalar('gAdv/train', g_adv, epoch)
+        writer.add_scalar('gPixel/train', g_pixel, epoch)
         # ---------------------
         #  Train Discriminator
         # ---------------------
@@ -163,11 +179,14 @@ for epoch in range(opt.n_epochs):
         optimizer_D.zero_grad()
 
         # Measure discriminator's ability to classify real from generated samples
-        real_loss = adversarial_loss(discriminator(masked_parts), valid)
+        real_loss = adversarial_loss(discriminator(imgs), valid)
         fake_loss = adversarial_loss(discriminator(gen_parts.detach()), fake)
         d_loss = 0.5 * (real_loss + fake_loss)
-
+        writer.add_scalar('dLoss/train', d_loss, epoch)
+        writer.add_scalar('fakeLoss/train', fake_loss,epoch)
+        writer.add_scalar('realLoss/train', real_loss, epoch)
         d_loss.backward()
+
         optimizer_D.step()
 
         print(
@@ -179,3 +198,5 @@ for epoch in range(opt.n_epochs):
         batches_done = epoch * len(dataloader) + i
         if batches_done % opt.sample_interval == 0:
             save_sample(batches_done)
+
+writer.close()
