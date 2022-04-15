@@ -171,6 +171,7 @@ pixelloss = checkpoint['pixelloss']
 last_epoch = checkpoint['epoch']
 
 
+
 # ----------
 #  Training
 # ----------

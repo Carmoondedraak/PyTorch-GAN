@@ -57,7 +57,7 @@ class ImageDataset(Dataset):
 
 
     def __getitem__(self, index):
-
+        print(index)
         img = Image.open(self.files[index % len(self.files)])
         img = self.transform(img)
 
